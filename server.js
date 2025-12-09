@@ -97,6 +97,33 @@ app.post("/api/upload", upload.array("files"), (req, res) => {
   return res.json({ success: true, items: added });
 });
 
+// Helper to delete all images (admin)
+function clearAllImages(pw, res) {
+  if (pw !== ADMIN_PASSWORD)
+    return res.status(401).json({ error: "Unauthorized" });
+  const meta = loadMeta();
+  for (const item of meta) {
+    try {
+      fs.unlinkSync(path.join(DATA_DIR, item.filename));
+    } catch (e) {
+      /* ignore missing */
+    }
+  }
+  saveMeta([]);
+  return res.json({ success: true, removed: meta.length });
+}
+
+// Delete all images (admin) to clear gallery
+app.delete("/api/images", (req, res) => {
+  const pw = req.get("x-admin-password") || "";
+  return clearAllImages(pw, res);
+});
+// Alias endpoint to avoid caching/proxy weirdness
+app.delete("/api/images/clear", (req, res) => {
+  const pw = req.get("x-admin-password") || "";
+  return clearAllImages(pw, res);
+});
+
 // List uploaded images (public)
 app.get("/api/images", (req, res) => {
   const meta = loadMeta();

@@ -9,28 +9,7 @@
 */
 
 // Gallery data: edit this array to add/remove photos.
-const galleryImages = [
-  {
-    src: "images/photo1.jpg",
-    title: "Sunset Beach",
-    caption: "A calm evening at the shore.",
-  },
-  {
-    src: "images/photo2.jpg",
-    title: "Mountain Peak",
-    caption: "Snowy summit under blue sky.",
-  },
-  {
-    src: "images/photo3.jpg",
-    title: "City Night",
-    caption: "Lights and reflections on wet streets.",
-  },
-  {
-    src: "images/photo4.jpg",
-    title: "Forest Path",
-    caption: "Misty morning walk.",
-  },
-];
+const galleryImages = [];
 
 /*
   Developer / admin defaults
@@ -112,35 +91,14 @@ function updateLightbox() {
   lightboxTitle.textContent = item.title || "";
   lightboxText.textContent = item.caption || "";
 }
-function openAdmin() {
-  // open a small popup window for password input
-  const w = 420,
-    h = 260;
-  const left = screen.width / 2 - w / 2;
-  const top = screen.height / 2 - h / 2;
-  const features = `width=${w},height=${h},left=${left},top=${top},resizable=no`;
-  try {
-    adminPopupWindow = window.open("", "adminPopup", features);
-    if (!adminPopupWindow) {
-      alert(
-        "Popup blocked — allow popups for this site or use the Admin modal."
-      );
-      return;
-    }
-    const popupHtml = `<!doctype html><html><head><meta charset="utf-8"><title>Admin Login</title><style>body{font-family:Arial,Helvetica,sans-serif;padding:18px;background:#f7f7f8}label{display:block;margin-bottom:6px}input{width:100%;padding:8px;margin-bottom:8px;border:1px solid #ccc;border-radius:6px}button{padding:8px 12px;border-radius:6px}</style></head><body><h3>Admin Login</h3><label for="pwd">Password</label><input id="pwd" type="password" autofocus /><div style="display:flex;gap:8px;justify-content:flex-end"><button id="submit">Submit</button><button id="cancel">Cancel</button></div><script>const submit=document.getElementById('submit');const cancel=document.getElementById('cancel');submit.addEventListener('click',()=>{const v=document.getElementById('pwd').value;window.opener.postMessage({type:'adminAuth',password:v},window.location.origin);});cancel.addEventListener('click',()=>{window.close();});window.addEventListener('keydown',(e)=>{if(e.key==='Enter') submit.click();});window.addEventListener('message',(e)=>{if(e.origin!==window.location.origin) return; if(e.data && e.data.type==='adminAuthResult'){ if(e.data.success){ window.close(); } else { alert('Invalid password'); } }});</script></body></html>`;
-    adminPopupWindow.document.open();
-    adminPopupWindow.document.write(popupHtml);
-    adminPopupWindow.document.close();
-  } catch (err) {
-    console.error("Unable to open admin popup", err);
-    // fallback to modal
-    adminModal.classList.add("open");
-    adminModal.setAttribute("aria-hidden", "false");
-    setTimeout(() => adminPassword.focus(), 50);
-  }
-}
 function prevImage() {
   currentIndex = (currentIndex - 1 + allImages.length) % allImages.length;
+  updateLightbox();
+}
+
+function nextImage() {
+  if (!allImages.length) return;
+  currentIndex = (currentIndex + 1) % allImages.length;
   updateLightbox();
 }
 
@@ -390,14 +348,12 @@ async function handleFiles(files) {
   );
   if (filesArr.length === 0) return;
 
-  // Try upload to server first
-  let serverSuccess = false;
+  // Upload to server so all visitors share the same gallery
   try {
     const form = new FormData();
     // Resize each file in parallel then append
     const resizedPromises = filesArr.map(async (file) => {
       const blob = await resizeImage(file, 1600, 1200, 0.78);
-      // need a File/Blob with filename for form-data
       const f = new File([blob], file.name, { type: "image/jpeg" });
       form.append("files", f);
     });
@@ -406,41 +362,67 @@ async function handleFiles(files) {
     if (resp.ok) {
       const json = await resp.json();
       if (json && json.success) {
-        serverSuccess = true;
+        await fetchServerImages();
+        renderGallery();
+        showNotification("Uploaded to server", 2000);
+        return;
       }
     }
+    alert("Upload failed. Please try again.");
   } catch (e) {
-    console.warn("Server upload failed, will fallback to local storage", e);
+    console.warn("Server upload failed", e);
+    alert("Upload failed. Please try again.");
   }
-
-  if (serverSuccess) {
-    // Refresh server images
-    await fetchServerImages();
-    renderGallery();
-    showNotification("Uploaded to server", 2000);
-    return;
-  }
-
-  // Fallback: store in IndexedDB
-  for (const file of filesArr) {
-    try {
-      const blob = await resizeImage(file, 1600, 1200, 0.78);
-      await dbAddUserImage(blob, file.name, "");
-    } catch (e) {
-      console.error("Failed to process file", e);
-    }
-  }
-  await loadUserImagesFromDB();
-  renderGallery();
 }
 
 async function clearUserImages() {
-  if (!confirm("Remove all uploaded images from this browser?")) return;
+  /* legacy stub kept for backward compatibility */
+}
+
+async function clearUploadsWithAdmin(adminPassword) {
+  const confirmed = confirm(
+    "Remove all uploaded images? This clears server uploads (admin) and local browser uploads."
+  );
+  if (!confirmed) return;
+
+  let serverCleared = false;
+  try {
+    const resp = await fetch("/api/images/clear", {
+      method: "DELETE",
+      headers: { "X-Admin-Password": adminPassword },
+    });
+    if (resp.ok) serverCleared = true;
+    else {
+      const msg = `Server clear failed (${resp.status}).`;
+      console.warn(msg);
+      alert(msg);
+    }
+  } catch (e) {
+    console.warn("Server clear failed", e);
+    alert("Server clear failed. Local uploads will still be removed.");
+  }
+
   await dbClearUserImages();
   _objectUrls.forEach((url) => URL.revokeObjectURL(url));
   _objectUrls = [];
   userImages = [];
+  await fetchServerImages();
   renderGallery();
+  showNotification(
+    serverCleared ? "Cleared server + local uploads" : "Cleared local uploads",
+    2200
+  );
+}
+
+async function requestAdminAndClearUploads() {
+  const pwd = prompt("Admin password required to clear uploaded images:");
+  if (pwd === null) return;
+  const valid = await validateAdminPassword(pwd);
+  if (!valid) {
+    alert("Invalid password");
+    return;
+  }
+  await clearUploadsWithAdmin(pwd);
 }
 
 // Uploader wiring (drag/drop and file input)
@@ -476,7 +458,8 @@ function wireUploader(allowUploads) {
   fileInput.addEventListener("change", async (e) => {
     if (e.target.files) await handleFiles(e.target.files);
   });
-  clearUploadsBtn.addEventListener("click", clearUserImages);
+  clearUploadsBtn &&
+    clearUploadsBtn.addEventListener("click", requestAdminAndClearUploads);
 }
 
 // Admin UI wiring
@@ -488,7 +471,6 @@ const adminLogin = document.getElementById("adminLogin");
 const adminPassword = document.getElementById("adminPassword");
 const adminAuthArea = document.getElementById("adminAuthArea");
 const toggleUploads = document.getElementById("toggleUploads");
-let adminPopupWindow = null;
 
 async function validateAdminPassword(password) {
   // try server-side validation
@@ -510,8 +492,8 @@ async function validateAdminPassword(password) {
 }
 
 function openAdmin() {
-  // navigate to admin page instead of popup
-  window.location.href = "/admin.html";
+  // navigate to admin page instead of popup (relative path works for file:// and http://)
+  window.location.href = "admin.html";
 }
 
 function closeAdmin() {
@@ -524,45 +506,6 @@ function closeAdmin() {
 adminBtn && adminBtn.addEventListener("click", openAdmin);
 adminClose && adminClose.addEventListener("click", closeAdmin);
 adminOverlay && adminOverlay.addEventListener("click", closeAdmin);
-
-// handle messages from the popup (password submission)
-window.addEventListener("message", async (e) => {
-  if (e.origin !== window.location.origin) return;
-  const data = e.data || {};
-  if (data.type === "adminAuth") {
-    const pwd = data.password || "";
-    const valid = await validateAdminPassword(pwd);
-    // respond to popup
-    try {
-      if (adminPopupWindow && !adminPopupWindow.closed)
-        adminPopupWindow.postMessage(
-          { type: "adminAuthResult", success: !!valid },
-          window.location.origin
-        );
-    } catch (_) {}
-    if (valid) {
-      // short timeout for UX before revealing admin controls
-      showNotification("Authenticated", 1000);
-      setTimeout(async () => {
-        adminModal.classList.add("open");
-        adminModal.setAttribute("aria-hidden", "false");
-        adminAuthArea.style.display = "";
-        const saved = await dbGetSetting("allow_uploads");
-        const current =
-          saved !== undefined ? saved : DEFAULT_ALLOW_USER_UPLOADS;
-        toggleUploads.checked = !!current;
-        toggleUploads.onchange = async (ev) => {
-          await dbSaveSetting("allow_uploads", !!ev.target.checked);
-          wireUploader(!!ev.target.checked);
-        };
-        try {
-          if (adminPopupWindow && !adminPopupWindow.closed)
-            adminPopupWindow.close();
-        } catch (_) {}
-      }, 600);
-    }
-  }
-});
 
 // fallback admin login inside modal (keeps previous behavior but uses server)
 adminLogin &&
@@ -594,7 +537,6 @@ function renderGallery() {
 
     const image = document.createElement("img");
     image.alt = img.title || `Photo ${idx + 1}`;
-    image.loading = "lazy";
     image.dataset.index = idx;
     // set src directly (browser native lazy-loading will defer download where supported)
     image.src = img.src;
