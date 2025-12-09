@@ -4,7 +4,8 @@
   "description": "Static server + admin validation for Labubu_web",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "end": "powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Stop-Process\""
   },
   "dependencies": {
     "body-parser": "^1.20.2",
