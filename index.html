@@ -1,0 +1,108 @@
+<!--
+  index.html
+  Simple single-page photo gallery. Links to styles.css and script.js.
+  Place this file together with styles.css and script.js in the same folder.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>My Photo Gallery</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <h1 class="site-title">Nightmare Nightmare Nightmare</h1>
+        <nav class="site-nav">
+          <a href="#">Home</a>
+          <a href="#">About</a>
+        </nav>
+        <div class="site-actions">
+          <button id="adminBtn" class="small-btn">Admin</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- Uploader: shown when uploads are allowed by the developer toggle in script.js -->
+      <section id="uploader" class="uploader" aria-hidden="true">
+        <div class="upload-drop" id="uploadDrop">
+          Drop images here or click to select
+        </div>
+        <div class="upload-controls">
+          <input id="fileInput" type="file" accept="image/*" multiple />
+          <button id="clearUploads" class="small-btn">
+            Clear Uploaded Images
+          </button>
+        </div>
+      </section>
+
+      <section class="gallery-section">
+        <div id="gallery" class="gallery" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <!-- Modal / Lightbox -->
+    <div id="lightbox" class="lightbox" aria-hidden="true">
+      <div class="lightbox-overlay" id="lightboxOverlay"></div>
+      <div
+        class="lightbox-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="lightboxTitle"
+      >
+        <button class="lightbox-close" id="lightboxClose" aria-label="Close">
+          ×
+        </button>
+        <button class="lightbox-prev" id="lightboxPrev" aria-label="Previous">
+          ‹
+        </button>
+        <div class="lightbox-inner">
+          <img id="lightboxImage" src="" alt="" />
+          <div class="lightbox-caption">
+            <h2 id="lightboxTitle"></h2>
+            <p id="lightboxText"></p>
+          </div>
+        </div>
+        <button class="lightbox-next" id="lightboxNext" aria-label="Next">
+          ›
+        </button>
+      </div>
+    </div>
+
+    <script src="script.js"></script>
+    <!-- Admin Modal -->
+    <div id="adminModal" class="admin-modal" aria-hidden="true">
+      <div class="admin-overlay" id="adminOverlay"></div>
+      <div
+        class="admin-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="adminTitle"
+      >
+        <button id="adminClose" class="lightbox-close" aria-label="Close">
+          ×
+        </button>
+        <h2 id="adminTitle">Admin</h2>
+        <div class="admin-body">
+          <label for="adminPassword">Password</label>
+          <input id="adminPassword" type="password" />
+          <div id="adminAuthArea" style="display: none">
+            <label>
+              <input id="toggleUploads" type="checkbox" /> Allow user uploads
+            </label>
+            <p class="help">
+              Change the admin password in <code>script.js</code> before
+              deploying.
+            </p>
+          </div>
+          <div class="admin-actions">
+            <button id="adminLogin" class="small-btn">Login</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

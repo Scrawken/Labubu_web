@@ -1,0 +1,213 @@
+<!--
+  admin.html
+  Simple admin page to manage uploaded images and toggle uploads.
+  This page authenticates against POST /api/admin/validate and then
+  uses the provided password in the header 'X-Admin-Password' for admin actions.
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin - Photo Gallery</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .admin-wrap {
+        max-width: 900px;
+        margin: 80px auto;
+        padding: 18px;
+      }
+      .admin-login {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .image-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 12px;
+        margin-top: 18px;
+      }
+      .image-card {
+        background: #fff;
+        padding: 8px;
+        border-radius: 10px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+      }
+      .image-card img {
+        width: 100%;
+        height: 140px;
+        object-fit: cover;
+        border-radius: 6px;
+      }
+      .image-card input[type="text"] {
+        width: 100%;
+        margin-top: 6px;
+      }
+      .admin-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container">
+        <h1 class="site-title">Admin - Photo Gallery</h1>
+        <a href="/">Back</a>
+      </div>
+    </header>
+    <main class="admin-wrap container">
+      <div class="admin-top">
+        <div>
+          <div class="admin-login">
+            <input id="adminPwd" type="password" placeholder="Admin password" />
+            <button id="adminLoginBtn" class="small-btn">Login</button>
+          </div>
+          <p class="help">
+            Default password: change server ADMIN_PASSWORD before deploying.
+          </p>
+        </div>
+        <div>
+          <label
+            ><input id="allowUploadsCheck" type="checkbox" /> Allow user
+            uploads</label
+          >
+        </div>
+      </div>
+
+      <section>
+        <h2>Uploaded Images</h2>
+        <div id="imageList" class="image-list">Loading…</div>
+      </section>
+    </main>
+
+    <script>
+      let adminPassword = "";
+      const loginBtn = document.getElementById("adminLoginBtn");
+      const pwdInput = document.getElementById("adminPwd");
+      const allowCheck = document.getElementById("allowUploadsCheck");
+      const imageList = document.getElementById("imageList");
+
+      async function fetchSettings() {
+        try {
+          const r = await fetch("/api/settings");
+          if (!r.ok) return {};
+          return await r.json();
+        } catch (e) {
+          return {};
+        }
+      }
+
+      async function loadImages() {
+        imageList.textContent = "Loading…";
+        try {
+          const r = await fetch("/api/images");
+          const items = await r.json();
+          imageList.innerHTML = "";
+          if (!items.length) imageList.textContent = "No uploaded images.";
+          items.forEach((i) => {
+            const card = document.createElement("div");
+            card.className = "image-card";
+            const img = document.createElement("img");
+            img.src = i.url;
+            card.appendChild(img);
+            const t = document.createElement("input");
+            t.type = "text";
+            t.value = i.title || "";
+            card.appendChild(t);
+            const c = document.createElement("input");
+            c.type = "text";
+            c.value = i.caption || "";
+            card.appendChild(c);
+            const btns = document.createElement("div");
+            btns.style.display = "flex";
+            btns.style.gap = "8px";
+            btns.style.marginTop = "8px";
+            const del = document.createElement("button");
+            del.textContent = "Delete";
+            del.className = "small-btn";
+            del.addEventListener("click", async () => {
+              if (!confirm("Delete this image?")) return;
+              await fetch("/api/images/" + i.id, {
+                method: "DELETE",
+                headers: { "X-Admin-Password": adminPassword },
+              });
+              await loadImages();
+            });
+            const save = document.createElement("button");
+            save.textContent = "Save";
+            save.className = "small-btn";
+            save.addEventListener("click", async () => {
+              await fetch("/api/images/" + i.id, {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                  "X-Admin-Password": adminPassword,
+                },
+                body: JSON.stringify({ title: t.value, caption: c.value }),
+              });
+              alert("Saved");
+            });
+            btns.appendChild(save);
+            btns.appendChild(del);
+            card.appendChild(btns);
+            imageList.appendChild(card);
+          });
+        } catch (e) {
+          imageList.textContent = "Unable to load images.";
+        }
+      }
+
+      loginBtn.addEventListener("click", async () => {
+        const val = pwdInput.value || "";
+        try {
+          const r = await fetch("/api/admin/validate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: val }),
+          });
+          const j = await r.json();
+          if (j && j.success) {
+            adminPassword = val;
+            alert("Authenticated");
+            // fetch settings and images
+            const s = await fetchSettings();
+            if (s.allow_uploads !== undefined)
+              allowCheck.checked = !!s.allow_uploads;
+            await loadImages();
+          } else alert("Invalid password");
+        } catch (e) {
+          alert("Server error");
+        }
+      });
+
+      allowCheck.addEventListener("change", async () => {
+        if (!adminPassword) {
+          alert("Please login first");
+          allowCheck.checked = !allowCheck.checked;
+          return;
+        }
+        await fetch("/api/settings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Admin-Password": adminPassword,
+          },
+          body: JSON.stringify({ allow_uploads: allowCheck.checked }),
+        });
+        alert("Setting saved");
+      });
+
+      // initial load: show current setting
+      (async () => {
+        const s = await fetchSettings();
+        if (s.allow_uploads !== undefined)
+          allowCheck.checked = !!s.allow_uploads;
+        await loadImages();
+      })();
+    </script>
+  </body>
+</html>
